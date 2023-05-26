@@ -576,7 +576,6 @@ class get_meeting_reports extends \core\task\scheduled_task {
      */
     public function grading_participant_upon_duration($zoomrecord, $detailsid, $meetingduration) {
         global $CFG, $DB;
-        // TODO create a phpunit test for this function.
         require_once($CFG->libdir.'/gradelib.php');
         // Check if grading method is according attendance duration.
         if (get_config('zoom', 'gradingmethod') !== 'period') {
@@ -600,14 +599,14 @@ class get_meeting_reports extends \core\task\scheduled_task {
             if (!empty($durations[$userid])) {
                 $old = new \stdClass;
                 $old->duration = $durations[$userid];
-                $old->join = $join[$userid];
-                $old->leave = $leave[$userid];
+                $old->join_time = $join[$userid];
+                $old->leave_time = $leave[$userid];
                 // Calculating the overlap time.
                 $overlap = $this->get_participant_overlap_time($old, $record);
 
                 // Set the new data for next use.
-                $leave[$userid] = max($old->leave, $record->leave_time);
-                $join[$userid] = min($old->join, $record->join_time);
+                $leave[$userid] = max($old->leave_time, $record->leave_time);
+                $join[$userid] = min($old->join_time, $record->join_time);
                 $durations[$userid] = $old->duration + $record->duration - $overlap;
             } else {
                 $leave[$userid] = $record->leave_time;
@@ -661,11 +660,10 @@ class get_meeting_reports extends \core\task\scheduled_task {
      * @return int the overlap time
      */
     public function get_participant_overlap_time($old, $new) {
-        $oldjoin = (int)$old->join;
-        $oldleave = (int)$old->leave;
+        $oldjoin = (int)$old->join_time;
+        $oldleave = (int)$old->leave_time;
         $newjoin = (int)$new->join_time;
         $newleave = (int)$new->leave_time;
-        // TODO create a phpunit test for this function.
         // There is mainly two possibilities each with three included cases.
         if ($newjoin > $oldjoin) {
 
