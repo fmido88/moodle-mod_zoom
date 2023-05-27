@@ -439,7 +439,8 @@ class get_meeting_reports_test extends advanced_testcase {
         $context = \context_course::instance($course->id);
         $graders = get_users_by_capability($context, 'moodle/grade:edit');
         $this->assertEquals(1, count($graders));
-        $this->assertEquals($graders[0]->id, $teacher->id);
+        $firstkey = array_key_first($graders);
+        $this->assertEquals($graders[$firstkey]->id, $teacher->id);
         // Now fake the meeting details.
         $meeting = new stdClass();
         $meeting->id = 456123;
