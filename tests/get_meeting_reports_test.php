@@ -724,6 +724,6 @@ class get_meeting_reports_test extends advanced_testcase {
         $a->alreadygraded = 4;
 
         $messagecontent = get_string('gradingmessagebody', 'mod_zoom', $a);
-        $this->assertStringContainsString($messagecontent, $messages[0]->fullmessage);
+        $this->assertStringContainsString($messagecontent, $messages[1]->fullmessage);
     }
 }
