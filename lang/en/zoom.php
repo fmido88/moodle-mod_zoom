@@ -143,6 +143,24 @@ $string['getmeetingreports'] = 'Get meeting report from Zoom';
 $string['getmeetingrecordings'] = 'Get meeting recordings from Zoom';
 $string['globalsettings'] = 'Global settings';
 $string['globalsettings_desc'] = 'These settings apply to the Zoom plugin as a whole.';
+$string['gradinglink'] = 'Review or updates grades';
+$string['gradingmessagesubject'] = 'Users grades in zoom meeting: {$a->name}';
+$string['gradingmessagebody'] = 'In zoom meeting session: {$a->zoomurl};
+
+There is {$a->graded} users has been graded automaticly according to their duration in the meeting.
+
+And there is {$a->already graded} already graded before.
+
+But the following users needed to be graded manually as they couldn\'t be identified:
+
+{$a->needgrade}
+
+Review or update users grades from here: {$a->gradeurl}';
+$string['gradingsmallmeassage'] = 'Users grades quick report in {$a->name}:
+
+Need manual grading: {$a->number}
+
+Graded users: {$a->graded + $a->alreadygraded}';
 $string['gradingmethod_heading'] = 'Options for grading method';
 $string['gradingmethod_heading_help'] = 'Decide which method to use when grading Zoom participation.';
 $string['gradingmethod'] = 'Grading method';
@@ -224,6 +242,7 @@ $string['meetingcapacitywarningcontactrealhost'] = 'Please turn to the Zoom acco
 $string['meetingcapacitywarningcontactalthost'] = 'Please ask the host to turn to the Zoom account owner to obtain a larger Zoom license if all of these course participants need to join the meeting.';
 $string['meetingparticipantsdeleted'] = 'Meeting participant user data deleted.';
 $string['meetingrecordingviewsdeleted'] = 'Meeting recording user view data deleted.';
+$string['messageprovider:teacher_notification'] = 'Notify teachers about users grades (according to durations) in a zoom session';
 $string['modulename'] = 'Zoom meeting';
 $string['modulenameplural'] = 'Zoom Meetings';
 $string['modulename_help'] = 'Zoom is a video and web conferencing platform that gives authorized users the ability to host online meetings.';

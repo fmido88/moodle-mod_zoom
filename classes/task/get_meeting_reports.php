@@ -24,6 +24,7 @@
  */
 
 namespace mod_zoom\task;
+use core_user\search\course_teacher;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -593,7 +594,7 @@ class get_meeting_reports extends \core\task\scheduled_task {
         foreach ($records as $record) {
             $userid = $record->userid;
             if ($userid == null) {
-                continue;
+                $userid = $record->name;
             }
             // Check if there is old duration stored for this user.
             if (!empty($durations[$userid])) {
@@ -614,43 +615,77 @@ class get_meeting_reports extends \core\task\scheduled_task {
                 $durations[$userid] = $record->duration;
             }
         }
+        $graded = 0;
+        $alreadygraded = 0;
+        $needgrade = [];
         // Now check the duration for each user and grade them according to it.
         foreach ($durations as $userid => $userduration) {
-            // Check whether user has a grade. If not, then assign credit acording duration to them.
-            $gradelist = grade_get_grades($courseid, 'mod', 'zoom', $zoomrecord->id, $userid);
-            $gradelistitems = $gradelist->items;
 
-            // Is this meeting is gradable (i.e. the grade type is not "None")?
-            if (!empty($gradelistitems)) {
-                $grademax = $gradelistitems[0]->grademax;
-                $oldgrades = $gradelistitems[0]->grades;
-                $oldgrade = $oldgrades[$userid]->grade;
+            if (is_integer($userid)) {
+                // Check whether user has a grade. If not, then assign credit acording duration to them.
+                $gradelist = grade_get_grades($courseid, 'mod', 'zoom', $zoomrecord->id, $userid);
+                $gradelistitems = $gradelist->items;
 
-                // Setup the grade according to the duration.
-                $grades = [
-                    'rawgrade' => ($userduration * $grademax / $meetingduration),
-                    'userid' => $userid,
-                    'usermodified' => $userid,
-                    'dategraded' => '',
-                    'feedbackformat' => '',
-                    'feedback' => '',
-                ];
-                // Check for old grades, update it only in case the new one is higher.
-                // Using number_format because the old stored grade only contains 5 decimals.
-                if (empty($oldgrade) || $oldgrade < number_format($grades['rawgrade'], 5)) {
-                    zoom_grade_item_update($zoomrecord, $grades);
-                    $this->debugmsg('grades updated for user with id: '.$userid
-                                                .', duration =' . $userduration
-                                                .', maxgrade ='.$grademax
-                                                .', meeting duration ='.$meetingduration
-                                                .', User grade:'.$grades['rawgrade']);
-                } else {
-                    $this->debugmsg('User already has a higher grade existed, Users old grade: '. $oldgrade
-                                    .', User\'s new grade: '.$grades['rawgrade']);
+                // Is this meeting is gradable (i.e. the grade type is not "None")?
+                if (!empty($gradelistitems)) {
+                    $itemid = $gradelistitems[0]->id;
+                    $grademax = $gradelistitems[0]->grademax;
+                    $oldgrades = $gradelistitems[0]->grades;
+                    $oldgrade = $oldgrades[$userid]->grade;
+
+                    // Setup the grade according to the duration.
+                    $grades = [
+                        'rawgrade' => ($userduration * $grademax / $meetingduration),
+                        'userid' => $userid,
+                        'usermodified' => $userid,
+                        'dategraded' => '',
+                        'feedbackformat' => '',
+                        'feedback' => '',
+                    ];
+                    // Check for old grades, update it only in case the new one is higher.
+                    // Using number_format because the old stored grade only contains 5 decimals.
+                    if (empty($oldgrade) || $oldgrade < number_format($grades['rawgrade'], 5)) {
+                        zoom_grade_item_update($zoomrecord, $grades);
+                        $graded++;
+                        $this->debugmsg('grades updated for user with id: '.$userid
+                                                    .', duration =' . $userduration
+                                                    .', maxgrade ='.$grademax
+                                                    .', meeting duration ='.$meetingduration
+                                                    .', User grade:'.$grades['rawgrade']);
+                    } else {
+                        $alreadygraded++;
+                        $this->debugmsg('User already has a higher grade existed, Users old grade: '. $oldgrade
+                                        .', User\'s new grade: '.$grades['rawgrade']);
+                    }
+                }
+            } else {
+                // Check whether user has a grade. If not, then assign credit acording duration to them.
+                $gradelist = grade_get_grades($courseid, 'mod', 'zoom', $zoomrecord->id);
+                $gradelistitems = $gradelist->items;
+
+                // Is this meeting is gradable (i.e. the grade type is not "None")?
+                if (!empty($gradelistitems)) {
+                    $itemid = $gradelistitems[0]->id;
+                    $grademax = $gradelistitems[0]->grademax;
+
+                    // Set the information about participant grade.
+                    $grades = '(Name: '.$userid.
+                            ', grade: '.($userduration * $grademax / $meetingduration).')';
+                    $needgrade[] = $grades;
                 }
             }
         }
-
+        // Sending a notification to teachers in this course about grades, and users needed to be graded manualy.
+        $notifydata = [
+            'graded' => $graded,
+            'alreadygraded' => $alreadygraded,
+            'needgrade' => $needgrade,
+            'courseid' => $courseid,
+            'zoomid' => $zoomrecord->id,
+            'itemid' => $itemid,
+            'name' => $zoomrecord->name,
+        ];
+        $this->notify_teachers($notifydata);
     }
 
     /**
@@ -706,7 +741,89 @@ class get_meeting_reports extends \core\task\scheduled_task {
 
         return $overlap;
     }
+    /**
+     * Sending a notification to all teachers in the course
+     * also the names of the users needing a manual grading.
+     * return array of messages ids and false if there is no users in this course
+     * with the capability of edit grades.
+     *
+     * @param array $data
+     * @return array|bool
+     */
+    public function notify_teachers($data) {
+        // Number of users graded automaticaly.
+        $graded = $data['graded'];
+        // Number of users already graded.
+        $alreadygraded = $data['alreadygraded'];
+        // Number of users need to be graded.
+        $needgradenumber = count($data['needgrade']);
+        // List of users need grading.
+        $needgrade = (!empty($data['needgrade'])) ? implode('<br>', $data['needgrade']) : 'No users';
 
+        $zoomid = $data['zoomid'];
+        $itemid = $data['itemid'];
+        $name = $data['name'];
+        $courseid = $data['courseid'];
+        $context = \context_course::instance($courseid);
+        // Get teachers in the course (actually those with the ability to edit grades).
+        $teachers = get_enrolled_users($context, 'moodle/grade:edit', 0, 'u.*', null, 0, 0, true);
+
+        // Grading item url.
+        $gurl = new \moodle_url('/grade/report/singleview/index.php', [
+                                                            'id' => $courseid,
+                                                            'item' => 'grade',
+                                                            'itemid' => $itemid,
+                                                                        ]);
+        $gradeurl = \html_writer::link($gurl, get_string('gradinglink', 'mod_zoom'));
+
+        // Zoom instance url.
+        $zurl = new \moodle_url('/mod/zoom/view.php', ['id' => $zoomid]);
+        $zoomurl = \html_writer::link($zurl, $name);
+
+        // Data object used in lang strings.
+        $a = (object)[
+            'name' => $name,
+            'graded' => $graded,
+            'alreadygraded' => $alreadygraded,
+            'needgrade' => $needgrade,
+            'number' => $needgradenumber,
+            'gradeurl' => $gradeurl,
+            'zoomurl' => $zoomurl,
+        ];
+
+        // Prepare the message.
+        $message = new \core\message\message();
+        $message->component = 'mod_zoom';
+        $message->name = 'teacher_notification'; // The notification name from message.php.
+        $message->userfrom = \core_user::get_noreply_user();
+
+        $message->subject = get_string('gradingmessagesubject', 'mod_zoom', $a);
+
+        $messagebody = get_string('gradingmessagebody', 'mod_zoom', $a);
+
+        $message->fullmessage = $messagebody;
+        $message->fullmessageformat = FORMAT_MARKDOWN;
+        $message->fullmessagehtml = "<p>$messagebody</p>";
+        $message->smallmessage = get_string('gradingsmallmeassage', 'mod_zoom', $a);
+        $message->notification = 1;
+        $message->contexturl = $gurl; // This link redirect the teacher to the page of item's grades.
+        $message->contexturlname = get_string('gradinglink', 'mod_zoom');
+        // Email content.
+        $content = array('*' => array('header' => $message->subject, 'footer' => ''));
+        $message->set_additional_content('email', $content);
+        $messageids = [];
+        if (!empty($teachers)) {
+            foreach ($teachers as $teacher) {
+                $message->userto = $teacher;
+                // Actually send the message for each teacher.
+                $messageids[] = message_send($message);
+            }
+        } else {
+            return false;
+        }
+
+        return $messageids;
+    }
     /**
      * The meeting object from the Dashboard API differs from the Report API, so
      * normalize the meeting object to conform to what is expected it the
