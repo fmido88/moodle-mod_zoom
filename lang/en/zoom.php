@@ -147,9 +147,9 @@ $string['gradinglink'] = 'Review or updates grades';
 $string['gradingmessagesubject'] = 'Users grades in zoom meeting: {$a->name}';
 $string['gradingmessagebody'] = 'In zoom meeting session: {$a->zoomurl};
 
-There is {$a->graded} users has been graded automaticly according to their duration in the meeting.
+There is {$a->graded} users has been graded automatically according to their duration in the meeting.
 
-And there is {$a->already graded} already graded before.
+And there is {$a->alreadygraded} users already graded before.
 
 But the following users needed to be graded manually as they couldn\'t be identified:
 
