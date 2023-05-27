@@ -615,9 +615,12 @@ class get_meeting_reports_test extends advanced_testcase {
 
         // Now let's test the grads.
         set_config('gradingmethod', 'period', 'zoom');
+
+        // Prepare messages.
+        $this->preventResetByRollback(); // Messaging does not like transactions...
+        $mink = $this->redirectMessages();
         // Process meeting reports should call the function grading_participant_upon_duration
         // and insert grades.
-        $mink = $this->redirectMessages();
         $this->assertTrue($this->meetingtask->process_meeting_reports($meeting));
         $this->assertEquals(1, $DB->count_records('zoom_meeting_details'));
         $this->assertEquals(8, $DB->count_records('zoom_meeting_participants'));
