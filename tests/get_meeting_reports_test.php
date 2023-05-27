@@ -589,6 +589,18 @@ class get_meeting_reports_test extends advanced_testcase {
             'leave_time' => '2023-05-01T17:00:00Z',
             'duration' => 90 * 60
         ];
+
+        // Adding a participant at which matching names will fail.
+        // His duration is 110 min, this grant him a grade of 55.
+        $rawparticipants[8] = (object)[
+            'id' => '',
+            'user_id' => 168452,
+            'name' => 'Farouk',
+            'user_email' => '',
+            'join_time' => '2023-05-01T15:10:00Z',
+            'leave_time' => '2023-05-01T17:00:00Z',
+            'duration' => 110 * 60
+        ];
         $this->mockparticipantsdata['someuuid123'] = $rawparticipants;
         // First mock the webservice object, so we can inject the return values
         // for get_meeting_participants.
@@ -605,9 +617,10 @@ class get_meeting_reports_test extends advanced_testcase {
         set_config('gradingmethod', 'period', 'zoom');
         // Process meeting reports should call the function grading_participant_upon_duration
         // and insert grades.
+        $mink = $this->redirectMessages();
         $this->assertTrue($this->meetingtask->process_meeting_reports($meeting));
         $this->assertEquals(1, $DB->count_records('zoom_meeting_details'));
-        $this->assertEquals(7, $DB->count_records('zoom_meeting_participants'));
+        $this->assertEquals(8, $DB->count_records('zoom_meeting_participants'));
 
         $usersids = [];
         foreach ($users as $user) {
@@ -633,5 +646,73 @@ class get_meeting_reports_test extends advanced_testcase {
         // This user didn't enter the meeting.
         $grade = $grades[$users[4]->id]->grade;
         $this->assertEquals(null, $grade);
+        // Let's check the teacher notification if it is ok?
+        $messages = $mink->get_messages();
+        // Only one teacher, means only one message.
+        $this->assertEquals(1, count($messages));
+        // Verify that it has been sent to the teacher.
+        $this->assertEquals($teacher->id, $messages[0]->useridto);
+        // Check the content of the message.
+        // Grading item url.
+        $gurl = new \moodle_url('/grade/report/singleview/index.php', [
+                    'id' => $course->id,
+                    'item' => 'grade',
+                    'itemid' => $gradelistitems[0]->id,
+                                ]);
+        $gradeurl = \html_writer::link($gurl, get_string('gradinglink', 'mod_zoom'));
+
+        // Zoom instance url.
+        $zurl = new \moodle_url('/mod/zoom/view.php', ['id' => $id]);
+        $zoomurl = \html_writer::link($zurl, $zoomrecord->name);
+        $needgrade[] = '(Name: Farouk, grade: 55)';
+        $needgrade = implode('<br>', $needgrade);
+        $a = (object)[
+            'name' => $zoomrecord->name,
+            'graded' => 4,
+            'alreadygraded' => 0,
+            'needgrade' => $needgrade,
+            'number' => 1,
+            'gradeurl' => $gradeurl,
+            'zoomurl' => $zoomurl,
+        ];
+        $messagecontent = get_string('gradingmessagebody', 'mod_zoom', $a);
+        $this->assertStringContainsString($messagecontent, $messages[0]->fullmessage);
+
+        // Redo the process again to be sure that no grades has been changed.
+        // But this time with checking the notification messages for teachers.
+        $this->assertTrue($this->meetingtask->process_meeting_reports($meeting));
+        $this->assertEquals(1, $DB->count_records('zoom_meeting_details'));
+        $this->assertEquals(8, $DB->count_records('zoom_meeting_participants'));
+        $gradelist = grade_get_grades($course->id, 'mod', 'zoom', $zoomrecord->id, $usersids);
+        $gradelistitems = $gradelist->items;
+        $grades = $gradelistitems[0]->grades;
+        // Check grades of first user.
+        $grade = $grades[$users[0]->id]->grade;
+        $this->assertEquals(17.5, $grade);
+        // Check grades of second user.
+        $grade = $grades[$users[1]->id]->grade;
+        $this->assertEquals(30, $grade);
+        // Check grades of third user.
+        $grade = $grades[$users[2]->id]->grade;
+        $this->assertEquals(30, $grade);
+        // Check grades for fourth user.
+        $grade = $grades[$users[3]->id]->grade;
+        $this->assertEquals(45, $grade);
+        // This user didn't enter the meeting.
+        $grade = $grades[$users[4]->id]->grade;
+        $this->assertEquals(null, $grade);
+
+        // Let's check the teacher notification if it is ok?
+        $messages = $mink->get_messages();
+        // Only one teacher, but tqo messages till now.
+        $this->assertEquals(2, count($messages));
+        // Verify that it has been sent to the teacher.
+        $this->assertEquals($teacher->id, $messages[1]->useridto);
+        // Check the content of the message.
+        $a->graded = 0;
+        $a->alreadygraded = 4;
+
+        $messagecontent = get_string('gradingmessagebody', 'mod_zoom', $a);
+        $this->assertStringContainsString($messagecontent, $messages[0]->fullmessage);
     }
 }
